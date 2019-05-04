@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 Packages needed:
 seqinR, ape, fields
 
@@ -56,3 +57,149 @@ head(DRseq)
 head(RCseq)
   # many manipulation functions require a single vector of individual characters.
 ```
+
+To begin comparing these two sequences, we can perform some simple summaries and stats.
+
+  * First let's explore the length.
+
+```{r}
+length(DRseq)
+length(RCseq)
+
+```
+
+    - Differences in lengths can imply the presence of "indels," or insertions and deletions. These are the addition or removal of a nucleotide base due to mutation over time.
+    - Alignment will determine possible locations of indels between our samples.
+  
+  * We can also compare nucleotide content.
+  
+```{r}
+table(DRseq)
+table(RCseq)
+
+# a,c,t, and g are the four nucleic acids, s indicates a strong interaction of c and g, y is a c,t, or u, and n is any nucleic acid.
+```
+   
+    For more information on nucleic acid codes, see table below.
+#tried to insert img but its not working for some reason, come back to this
+
+```{r}
+  #can also use a seqinr function to just get nucleotides
+
+count(DRseq, 1)
+count(RCseq, 1)
+
+```
+
+    We can see that the bullfrog (RC) has fewer of each type of nucleotide, but it had fewer overall so better to look at proportions.
+    
+```{r}
+(DR_cont <- count(DRseq, 1)/length(DRseq))
+(RC_cont <- count(RCseq, 1)/length(RCseq))
+  # despite different total nucleotide amounts, both organisms have about the same frequency of each nucleotide.  
+
+```
+
+  * Another comparison is to examine over- and underrepresentation of nucleotide "words" (or groups).
+    - For example, we can compare the probability of seeing GpC groups (GC) to CpG groups (CG) to see if they are over- or underrepresented.
+        - CpG sites, particularly large concentrations of them known as "islands," are areas with high methylation and therefore high mutation rates, leading to often an underrepresntation in the sequence. 
+    - We will do this by calculating the ρ (Rho) value: frequency XY/ (frequency X) * (frequency y)
+        - If ρ >1, then the combo is occuring more than expected (overrepresented)
+        - If ρ <1, then the combo is occuring less than expected (underrepresented)
+
+```{r}
+# zebrafish
+
+(dr_words <- count(DRseq, 2, alphabet = s2c("acgt"))) # to get all possible 2-base combos
+
+fCG <- dr_words[7]/(length(DRseq)-1) # frequency of CG
+
+fGC <- dr_words[10]/(length(DRseq)-1) # frequency of GC
+
+
+(CG_rho.dr <- fCG/ (DR_cont[2] * DR_cont[3]))
+(GC_rho.dr <- fGC/ (DR_cont[3]*DR_cont[2]))
+
+# alternatively, can use the rho() function from {seqinr}
+
+(rho.dr <- rho(DRseq, wordsize = 2, alphabet = s2c("acgt")))
+
+# bullfrog
+
+(rho.rc <- rho(RCseq, wordsize = 2, alphabet = s2c("acgt")))
+
+```
+# might want to do a stats test to tell if cg is stat sig different than gc (can also look at cg vs cg between spp), but not sure which one to use (t.test gives an error)
+
+  * We can plot out this CG and GC variation along the sequence using a sliding window plot.
+    - A sliding window plot uses a window of a set size and slides it across the seqence. In each segment, the CG or GC concentration is calculated and plotted against the window position.
+    
+```{r} 
+# {seqinr} has a function to calculate the fraction of sequence that is GC, but not for CG. Here we create the equivalent function.
+
+CG <- function(sequence) {
+  
+  tot <- count(sequence, wordsize = 2, alphabet = s2c("acgt"))
+  cg <- tot[7]
+  freq <- cg/sum(tot[1],tot[2],tot[3],tot[4],tot[5],tot[6],tot[7],tot[8],tot[9],tot[10],tot[11],tot[12],tot[13],tot[14],tot[15], tot[16])
+  print(freq)
+  
+} 
+```
+
+```{r}
+
+#Sliding window plot function by Avril Coghlan (little book of r)
+  #GC
+swp.GC <- function(windowsize, inputseq)
+{
+   starts <- seq(1, length(inputseq)-windowsize, by = windowsize)
+   n <- length(starts)    
+   chunkGCs <- NULL 
+   for (i in 1:n) {
+        chunk <- inputseq[starts[i]:(starts[i]+windowsize-1)]
+        chunkGC <- GC(chunk)
+        print(chunkGC)
+        chunkGCs[i] <- chunkGC
+   }
+   plot(starts,chunkGCs,type="b",xlab="Nucleotide start position",ylab="GC content")
+}
+
+  #CG
+swp.CG <- function(windowsize, inputseq)
+{
+   starts <- seq(1, length(inputseq)-windowsize, by = windowsize)
+   n <- length(starts)    
+   chunkCGs <- NULL 
+   for (i in 1:n) {
+        chunk <- inputseq[starts[i]:(starts[i]+windowsize-1)]
+        chunkCG <- CG(chunk)
+        print(chunkCG)
+        chunkCGs[i] <- chunkCG
+   }
+   plot(starts,chunkCGs,type="b",xlab="Nucleotide start position",ylab="CG content")
+}
+```
+
+```{r}
+par(mfrow=c(1,2))
+swp.GC(100, DRseq)
+swp.GC(100, RCseq)
+swp.CG(100, DRseq)
+swp.CG(100, RCseq)
+```
+    Higher peaks can suggest nonrandom clustering. 
+
+
+## Visualizing conservation
+After aligning, we can compare how similar sequences are using various visualizations.
+
+#### Dotplot
+
+#### Distance matrix
+
+A distance matrix compares the similarities between multiple sequences by calculating square root distances (or some shit). 
+
+
+#### Simply phylogeny
+
