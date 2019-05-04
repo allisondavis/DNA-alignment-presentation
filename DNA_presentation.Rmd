@@ -1,0 +1,58 @@
+---
+title: "DNA presentation"
+author: "Allison Davis"
+date: "May 3, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Packages needed:
+seqinR, ape, fields
+
+
+```{r}
+library(seqinr)
+```
+
+Sequences we are choosing for today:
+
+American bullfrog (*Rana catesbiana*)
+accession: AY324231
+
+Zebrafish (*Danio rerio*)
+accession: NM_001083123
+
+Can get sequence data from the NCBI website manually.
+
+Load fasta file to R.
+
+```{r}
+library(curl)
+dr <- curl("https://raw.githubusercontent.com/celeslie/DNA-Presentation/master/daniorerioAR.fasta")
+DRseq <- read.fasta(dr)
+
+rc <- curl("https://raw.githubusercontent.com/celeslie/DNA-Presentation/master/ranacatesbianaAR.fasta")
+RCseq <- read.fasta(rc)
+```
+
+
+Take out first line, so that all that is left is a vector containing the nucleotide sequence. 
+#what else does the fasta inlcude?
+
+```{r}
+DRseq <- DRseq[[1]]
+RCseq <- RCseq[[1]]
+
+```
+
+Let's look at what we have.
+
+
+```{r}
+head(DRseq)
+head(RCseq)
+  # many manipulation functions require a single vector of individual characters.
+```
