@@ -1,0 +1,443 @@
+---
+title: "DNA-Analysis_Pres"
+author: "Caitlin Leslie and Allison Davis"
+date: "May 7, 2019"
+output: html_document
+---
+
+---
+title: "DNA Sequence Analysis"
+author: "Caitlin Leslie and Allison Davis"
+date: "5/1/2019"
+output:  
+  html_document:
+      css: ../github.css
+      df_print: default
+      highlight: pygments
+      keep_md: yes
+      theme: cosmo
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = TRUE,
+	message = TRUE,
+	comment = "##",
+	prompt = FALSE,
+	tidy = TRUE,
+	tidy.opts = list(blank = FALSE, width.cutoff = 75),
+	fig.path = "img/",
+	fig.align = "center"
+)
+```
+
+# Basics of DNA Sequence Analysis
+
+## Preliminaries
+- Install these packages in ***R***: [{seqinR}, {curl}, {ape}, {phangorn}, {ade4}]
+
+
+## Objectives
+
+> The objective of this module is to walk through some basics of DNA analysis. We will discuss:
+1) Accessing sequences of interest on NCBI, one of the primary databases for DNA sequences.
+2) Loading those sequences into R and gathering preliminary descriptive information about those sequences.
+3) Building phylogenies from aligned DNA sequences.
+4) Comparing aligned sequences from different species using a mosaic plot.
+
+## Obtaining DNA sequences from NCBI
+
+```{r}
+
+library(seqinr)
+library(curl)
+library(ape)
+library(phangorn)
+library(ade4)
+
+```
+
+
+Sequences we are choosing for today:
+
+American bullfrog (*Rana catesbiana*)
+accession: AY324231
+
+Zebrafish (*Danio rerio*)
+accession: NM_001083123
+
+* These accession numbers were retrieved off of NCBI, in particular their "RefSeq" portion for referenced (or standardized) sequences.
+
+<img src="img/RefSeq.jpg" width="750px"/>
+
+* You can then search for a particular type of reference sequence. This can be based on the gene of interest or the organism. We wanted to look at androgen receptors. 
+
+<img src="img/RefSeq_ARsearch.jpg" width="750px"/>
+
+* This now gives us all the uploaded datasets for androgen receptors. We are interested in particular organisms, so we can narrow this search by species. You can click this left-hand section, and either type in the species or click the check boxes that already exist. We typed in fish and frogs to narrow our search.
+
+<img src="img/RefSeq_ARsearch2.jpg" width="750px"/>
+
+* We can then choose the specific species.
+
+<img src="img/RefSeq_ARsearch3.jpg" width="750px"/>
+
+* This page gives a summary of the information, including the accession number at the top. To download the sequence, we hit the send to tab...
+
+<img src="img/DRfasta.jpg" width="750px"/>
+
+* ... choose the complete record, a file destination, and FASTA format. This is a text file format with the sequence ID at the top and sequence following, and is the most universal file type for DNA analyses/manipulation.
+
+<img src="img/DRfasta2.jpg" width="750px"/>
+
+
+## Preliminary descriptive functions
+
+Load fasta files into R.
+
+```{r}
+
+dr <- curl("https://raw.githubusercontent.com/celeslie/DNA-Presentation/master/daniorerioAR.fasta")
+DRseq <- read.fasta(dr)
+
+rc <- curl("https://raw.githubusercontent.com/celeslie/DNA-Presentation/master/ranacatesbianaAR.fasta")
+RCseq <- read.fasta(rc)
+
+```
+
+
+Take out first line, so that all that is left is a vector containing the nucleotide sequence. 
+
+
+```{r}
+
+DRseq <- DRseq[[1]]
+RCseq <- RCseq[[1]]
+
+```
+
+
+Let's look at what we have.
+
+
+```{r}
+
+head(DRseq)
+head(RCseq)
+  # many manipulation functions require a single vector of individual characters.
+
+```
+
+To begin comparing these two sequences, we can perform some simple summaries.
+
+  * First, let's explore the length.
+
+```{r}
+
+length(DRseq)
+length(RCseq)
+
+```
+
+    - Differences in lengths can imply the presence of "indels," or insertions and deletions. These are the addition or removal of a nucleotide base due to mutation over time.
+    - Alignment will determine possible locations of indels between our samples.
+  
+  * We can also compare nucleotide content.
+  
+```{r}
+
+table(DRseq)
+table(RCseq)
+
+# a,c,t, and g are the four nucleic acids, s indicates a strong interaction of c and g, y is a c,t, or u, and n is any nucleic acid.
+
+```
+
+    For more information on nucleic acid codes, see table below.
+    
+<img src = "img/dna_content.JPG" width="636.px/>"
+
+
+```{r}
+  #can also use a seqinr function to just get nucleotides
+
+count(DRseq, 1)
+count(RCseq, 1)
+
+```
+
+    We can see that the bullfrog (RC) has fewer of each type of nucleotide, but it had fewer overall so better to look at proportions.
+    
+```{r}
+
+(DR_cont <- count(DRseq, 1)/length(DRseq))
+(RC_cont <- count(RCseq, 1)/length(RCseq))
+  # despite different total nucleotide amounts, both organisms have about the same frequency of each nucleotide.  
+
+```
+
+  * Another comparison is to examine over- and underrepresentation of nucleotide "words" (or groups).
+    - For example, we can compare the probability of seeing GpC groups (GC) to CpG groups (CG) to see if they are over- or underrepresented.
+        - CpG sites, particularly large concentrations of them known as "islands," are areas with high methylation and therefore high mutation rates, leading to often an underrepresntation in the sequence. 
+    - We will do this by calculating the ρ (Rho) value: frequency XY/ (frequency X) * (frequency y)
+        - If ρ >1, then the combo is occuring more than expected (overrepresented)
+        - If ρ <1, then the combo is occuring less than expected (underrepresented)
+
+
+```{r}
+
+# zebrafish
+
+(dr_words <- count(DRseq, 2, alphabet = s2c("acgt"))) # to get all possible 2-base combos
+
+fCG <- dr_words[7]/(length(DRseq)-1) # frequency of CG
+
+fGC <- dr_words[10]/(length(DRseq)-1) # frequency of GC
+
+
+(CG_rho.dr <- fCG/ (DR_cont[2] * DR_cont[3]))
+(GC_rho.dr <- fGC/ (DR_cont[3]*DR_cont[2]))
+
+# alternatively, can use the rho() function from {seqinr}
+
+(rho.dr <- rho(DRseq, wordsize = 2, alphabet = s2c("acgt")))
+
+# bullfrog
+
+(rho.rc <- rho(RCseq, wordsize = 2, alphabet = s2c("acgt")))
+
+```
+
+
+  * We can plot out this CG and GC variation along the sequence using a sliding window plot.
+    - A sliding window plot uses a window of a set size and slides it across the seqence. In each segment, the CG or GC concentration is calculated and plotted against the window position.
+    
+```{r} 
+
+# {seqinr} has a function to calculate the fraction of sequence that is GC, but not for CG. Here we create the equivalent function.
+
+CG <- function(sequence) {
+  
+  tot <- count(sequence, wordsize = 2, alphabet = s2c("acgt"))
+  cg <- tot[7]
+  freq <- cg/sum(tot[1],tot[2],tot[3],tot[4],tot[5],tot[6],tot[7],tot[8],tot[9],tot[10],tot[11],tot[12],tot[13],tot[14],tot[15], tot[16])
+  print(freq)
+  
+} 
+
+```
+
+```{r}
+
+#Sliding window plot function by Avril Coghlan (little book of r)
+  #GC
+swp.GC <- function(windowsize, inputseq)
+{
+   starts <- seq(1, length(inputseq)-windowsize, by = windowsize)
+   n <- length(starts)    
+   chunkGCs <- NULL 
+   for (i in 1:n) {
+        chunk <- inputseq[starts[i]:(starts[i]+windowsize-1)]
+        chunkGC <- GC(chunk)
+        chunkGCs[i] <- chunkGC
+   }
+   plot(starts,chunkGCs,type="b",xlab="Nucleotide start position",ylab="GC content")
+}
+
+  #CG
+swp.CG <- function(windowsize, inputseq)
+{
+   starts <- seq(1, length(inputseq)-windowsize, by = windowsize)
+   n <- length(starts)    
+   chunkCGs <- NULL 
+   for (i in 1:n) {
+        chunk <- inputseq[starts[i]:(starts[i]+windowsize-1)]
+        chunkCG <- CG(chunk)
+        chunkCGs[i] <- chunkCG
+   }
+   plot(starts,chunkCGs,type="b",xlab="Nucleotide start position",ylab="CG content")
+}
+
+```
+
+```{r}
+
+par(mfrow=c(1,2))
+swp.GC(100, DRseq)
+swp.GC(100, RCseq)
+swp.CG(100, DRseq)
+swp.CG(100, RCseq)
+
+```
+
+Compare 2 sequences with a dotplot
+
+  * To see how similar two sequences are not only in the ammount of similar nucleotides but their locations, we can use a dot plot. This will compare each position of one sequence to the other, placing a dot where they are similar.
+
+```{r}
+
+dotPlot(DRseq, RCseq)
+
+```
+
+
+  * As you can see, this is pretty messy. What this is showing us the every position in one-to-one comparison that shares the same nucleotide. A lot of these can happen by chance or by position of indels, so we want to focus on the diagonal of the plot. This is the comparison of similar nucleotides located at **identical** positions along the nucleotide. 
+
+<img src = "img/dot_plot.JPG" width="486.px/>"
+
+
+## Building Phylogenies from Aligned Data Sequences 
+
+Pairwise sequence alignment identifies nucleotide regions of similarity between multiple protein or nucleic acid sequences. 
+
+While there are ways to perform sequence alignment in R, it is much more convenient to use programs specifically for that purpose, such as Clustal, or even online tools such as NCBI's BLAST. 
+
+<img src="img/NCBI_BLAST.jpg" width="750px"/>
+
+
+For today's purposes, we will therefore be using a data file of sequences that have already been aligned. This is a DNAbin file that contains the sequences of a single gene locus called ADAM7 from 40 different mammalian species. This data file was obtained from Joe Felsenstein's website. Below is the link to the webpage, in case you ever need sample data sets of aligned sequences:
+
+http://evolution.gs.washington.edu/gs570/2016/#data
+
+
+Load in the ADAM7 filed from github.
+
+```{r}
+
+adam7 <- curl("https://raw.githubusercontent.com/celeslie/DNA-Presentation/master/ADAM7.dna")
+adam7<-read.dna(adam7, format="interleaved")
+
+```
+
+Convert the DNAbin file to a phyDat object so that it can be used in phangorn, a treebuilding package in R.
+
+```{r}
+
+adam7_phydat<-phyDat(adam7, type="DNA", levels=NULL)
+
+```
+
+For today, we will subset the data to include only the first 10 taxa, just to make the dataset a little easier to manage.
+
+```{r}
+
+adam7_10<-subset(adam7_phydat, 1:10)
+adam7_10_phydat<-phyDat(adam7_10, type="DNA", levels=NULL)
+
+```
+
+
+Create a distance matrix using dist.dna() function in the ape package.
+To do this, we must choose a model of molecular evolution to use to make the matrix. We will use the "raw" model, which simply uses the proportion of sites that are different between each pair of sequences, without making any assumptions about substitution rates.
+
+
+```{r}
+
+adam7_10_dna<-as.DNAbin(adam7_10) #converts subsetted phydat object back into DNAbin format
+
+dist_adam7_dna<-dist.dna(adam7_10_dna, model="raw")
+dist_adam7_dna
+
+```
+
+Use Maximum Parsimony to determine the best tree. To do this, we will create several trees using various methods and get the parsimony score for each tree.The parsimony score of a tree is the minimum number of changes necessary to create that tree. Generally speaking, the lower the parsimony score, the more likely the tree is correct.
+
+
+Estimate a rooted tree using UPGMA.This is a method of phylogeny estimation which assumes a constant substition rate across time and lineages. It progressively clusters the two taxa with the smallest genetic distance over multiple iterations.
+
+
+```{r}
+adam7_upgma <- upgma(dist_adam7_dna)
+plot(adam7_upgma, main="UPGMA")
+```
+
+Find the parsimony score for the UPGMA tree.
+
+```{r}
+
+parsimony(adam7_upgma, adam7_10)
+
+```
+
+
+Estimate an unrooted tree using Neighbor Joining.This method of tree estimation clusters taxa into pairs that minimize the total branch length at each clustering iteration.
+
+```{r}
+
+adam7_nj <- NJ(dist_adam7_dna)
+plot(adam7_nj, "unrooted", main="Neighbor Joining")
+
+```
+
+Find the parsimony score for the neighbor joining tree.
+
+```{r}
+
+parsimony(adam7_nj, adam7_10)
+
+```
+
+
+Estimate a tree using the function optim.parsimony(). This function uses nearest neighbor interchange (NNI) and subtree pruning and regrafting (SPR) to construct a tree. NNI take an unrooted tree and exchanges subtrees among internal branches, while SPR removes subtrees and reinserts them elsewhere in the tree. Both of these methods run until the highest likelihood tree is reached.
+
+```{r}
+
+adam7_optim<-optim.parsimony(adam7_nj, adam7_10)
+plot(adam7_optim)
+parsimony(adam7_optim, adam7_10)
+
+```
+
+Estimate a tree using parsimony ratchet. This method creates a starting tree and randomly selects a set of characters that are given additional weights. The branches are then swapped on the tree using the new weights. The weights are set back to their original values, and the branches are swapped again. This process is repeated over many iterations until the most parsimonious tree is found.
+
+```{r}
+
+adam7_pratchet<-pratchet(adam7_10)
+plot(adam7_pratchet)
+parsimony(adam7_pratchet, adam7_10)
+
+```
+
+So optim.parsimony and pratchet both give us a parsimony score of 1927, which is lower than the upgma score of 2037 and the neighbor joining score of 1945. However, parsimony ratchet is thought to find better trees than the NNI/SPR rearrangements methods done by optim.parsimony.
+
+#### Mosaic plots
+
+Mosaic plots compare the distances of sequences, so how similar (close) or dissimilar (distant) sequences are. This is similar to the dot plot we did before, but with more sequence information.
+    Does not give any information on evolution, just sequence similarity.
+    
+```{r}
+
+library(ade4)
+
+DIST <- as.data.frame(as.matrix(dist_adam7_dna))
+
+table.paint(DIST, cleg=0, clabel.row=0.5, clabel.col=0.5)
+  #darker shades of grey represent greater distances
+
+#can make into a prettier plot using image()
+
+Dist <- t(as.matrix(dist_adam7_dna))
+Dist <- Dist[,ncol(Dist):1]
+
+image(x=1:10, y=1:10, Dist, col=heat.colors(100), xaxt="n", yaxt="n", xlab="",ylab="")
+axis(side=2, at=1:10, lab=rev(rownames(adam7_10_dna)), las=2, cex.axis=.5)
+axis(side=3, at=1:10, lab=rownames(adam7_10_dna), las=3, cex.axis=.5)
+  #here, darker shades are more similar (closer)
+
+```
+
+
+<div class="fold s o">
+```{r}
+# This block of R code will be foldable after knitting
+```
+</div>
+
+
+## Concept Review
+* NCBI's RefSeq is a valuable tool for finding and downloading both nucleotide and protein sequences.
+* R has many functions available for gathering information about nucleotide sequences.
+* Aligned sequences can be used to build phylogenies and mosaic plots.
